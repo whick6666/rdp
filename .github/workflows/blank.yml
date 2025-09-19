@@ -22,10 +22,9 @@ jobs:
       - name: Authenticate Ngrok
         env:
           NGROK_AUTH: ${{ secrets.TAKEN }}
-        run: |
-          ./ngrok/ngrok.exe authtoken $Env:NGROK_AUTH
+        run: ./ngrok/ngrok.exe authtoken $Env:NGROK_AUTH
 
-      - name: Configure Windows for RDP
+      - name: Enable RDP Access
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
@@ -34,9 +33,21 @@ jobs:
 
       - name: Start Ngrok Tunnel (Port 3389)
         run: |
-          Start-Process -FilePath "./ngrok/ngrok.exe" -ArgumentList "tcp", "3389", "--region", "ap"
+          Start-Process -FilePath "./ngrok/ngrok.exe" -ArgumentList "tcp 3389" -RedirectStandardOutput "ngrok.log"
           Start-Sleep -Seconds 10
-          Get-Content "$env:USERPROFILE\AppData\Local\ngrok\ngrok.yml"
+
+      - name: Show Ngrok Public RDP Address
+        run: |
+          $log = Get-Content ngrok.log -Raw
+          $match = $log -match "url=tcp://([a-zA-Z0-9\.-]+):([0-9]+)"
+          if ($match) {
+            $host = $matches[1]
+            $port = $matches[2]
+            Write-Output "🔗 RDP Login Address: $host:$port"
+          } else {
+            Write-Output "❌ Could not extract Ngrok tunnel URL. Check ngrok.log for details."
+            Get-Content ngrok.log
+          }
 
       - name: Run RDP Script
         run: cmd /c start.bat
